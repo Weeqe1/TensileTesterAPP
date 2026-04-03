@@ -16,7 +16,7 @@ class TensileTesterApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("拉力计数据处理器 - TensileTesterAPP")
+        self.title("拉力计数据处理器 - TensileTesterAPP v2.1")
         self.geometry("1100x700")
 
         # 数据变量
