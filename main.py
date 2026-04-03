@@ -136,7 +136,24 @@ class TensileTesterApp(ctk.CTk):
             self.file_path = file_path
             self.lbl_file_status.configure(text=os.path.basename(file_path))
             try:
-                self.raw_df = pd.read_csv(file_path)
+                # 寻找真实的表头行，跳过前导无用信息
+                skip = 0
+                try:
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        for i, line in enumerate(f):
+                            line_lower = line.lower()
+                            if 'time' in line_lower or 'load' in line_lower or 'force' in line_lower or 'reading' in line_lower or '时间' in line_lower or '力' in line_lower:
+                                skip = i
+                                break
+                except Exception:
+                    pass
+                
+                # 加载对应数据
+                try:
+                    self.raw_df = pd.read_csv(file_path, skiprows=skip)
+                except UnicodeDecodeError:
+                    self.raw_df = pd.read_csv(file_path, skiprows=skip, encoding='gbk')
+                    
                 messagebox.showinfo("成功", f"文件已加载，共 {len(self.raw_df)} 行数据")
             except Exception as e:
                 messagebox.showerror("错误", f"读取文件失败: {e}")
@@ -147,13 +164,31 @@ class TensileTesterApp(ctk.CTk):
             return
 
         try:
-            # 1. 负值统一转正值
             df = self.raw_df.copy()
-            # 假设列名为 Time/S 和 Force/N，如果不是则通过索引获取
+            
+            # 智能匹配时间与力值列
             cols = df.columns.tolist()
-            time_col = cols[0]
-            force_col = cols[1]
+            time_col = None
+            force_col = None
+            
+            for col in cols:
+                col_lower = str(col).lower()
+                if ('time' in col_lower or '时间' in col_lower or 'sec' in col_lower) and time_col is None:
+                    time_col = col
+                elif ('load' in col_lower or 'force' in col_lower or '力' in col_lower) and force_col is None:
+                    force_col = col
+                    
+            if time_col is None:
+                time_col = cols[0] 
+            if force_col is None:
+                force_col = cols[1] if len(cols) > 1 else cols[0]
 
+            # 清洗字符串干扰数据（转为数值型，无法转换的剔除）
+            df[force_col] = pd.to_numeric(df[force_col], errors='coerce')
+            df[time_col] = pd.to_numeric(df[time_col], errors='coerce')
+            df = df.dropna(subset=[force_col, time_col])
+
+            # 1. 负值统一转正值
             df[force_col] = df[force_col].abs()
 
             # 2. 只有关注的数值范围 (力 + 时间)
